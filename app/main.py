@@ -10,13 +10,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=[
+        "http://localhost:5173",
+        "https://sports-iq-app-qy6on1ii.devinapps.com"
+    ],
+    allow_credentials=False,  # We use Bearer tokens, not cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.on_event("startup")
