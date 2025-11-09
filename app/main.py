@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics, events, admin_events
+from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics, events, admin_events, rivalry
 from app.database import init_db
 
 app = FastAPI(
@@ -34,6 +34,7 @@ app.include_router(leaderboard.router)
 app.include_router(analytics.router)
 app.include_router(events.router)
 app.include_router(admin_events.router)
+app.include_router(rivalry.router)
 
 @app.get("/healthz")
 async def healthz():

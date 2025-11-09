@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, JSON, Enum as SQLEnum
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, JSON, Enum as SQLEnum, Date, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -112,6 +112,36 @@ class EventSubscription(Base):
     expiration_date = Column(DateTime, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class RivalryHistory(Base):
+    __tablename__ = "rivalry_history"
+    
+    id = Column(String, primary_key=True, index=True)
+    team_a = Column(String, index=True, nullable=False)
+    team_b = Column(String, index=True, nullable=False)
+    sport = Column(String, index=True, nullable=False)
+    game_date = Column(Date, nullable=False)
+    score_a = Column(Integer, nullable=False)
+    score_b = Column(Integer, nullable=False)
+    winner = Column(String, nullable=False)
+    summary = Column(Text, nullable=True)
+    game_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class RivalryMetrics(Base):
+    __tablename__ = "rivalry_metrics"
+    
+    id = Column(String, primary_key=True, index=True)
+    team_a = Column(String, index=True, nullable=False)
+    team_b = Column(String, index=True, nullable=False)
+    sport = Column(String, index=True, nullable=False)
+    total_meetings = Column(Integer, default=0, nullable=False)
+    wins_a = Column(Integer, default=0, nullable=False)
+    wins_b = Column(Integer, default=0, nullable=False)
+    avg_margin = Column(Float, default=0.0, nullable=False)
+    current_streak = Column(String, nullable=True)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 def get_db():
     db = SessionLocal()
