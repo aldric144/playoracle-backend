@@ -78,6 +78,41 @@ class AIPrediction(Base):
     factors = Column(JSON, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class EventStatusEnum(str, enum.Enum):
+    UPCOMING = "upcoming"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
+
+class PremiumEvent(Base):
+    __tablename__ = "premium_events"
+    
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    description = Column(String, nullable=False)
+    status = Column(SQLEnum(EventStatusEnum), default=EventStatusEnum.UPCOMING)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    expiration_date = Column(DateTime, nullable=False)
+    stripe_price_id_single = Column(String, nullable=True)
+    stripe_price_id_season = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EventSubscription(Base):
+    __tablename__ = "event_subscriptions"
+    
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, index=True, nullable=False)
+    event_slug = Column(String, index=True, nullable=False)
+    stripe_price_id = Column(String, nullable=True)
+    option_type = Column(String, nullable=False)
+    purchase_date = Column(DateTime, default=datetime.utcnow)
+    expiration_date = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 def get_db():
     db = SessionLocal()
     try:
@@ -94,6 +129,7 @@ def init_db():
 def run_migrations():
     """Run database migrations for schema updates"""
     from sqlalchemy import text
+    import uuid
     
     db = SessionLocal()
     try:
@@ -123,6 +159,78 @@ def run_migrations():
         except Exception as e:
             db.rollback()
             print(f"Migration note: Could not update admin user - {e}")
+        
+        seed_premium_events(db)
             
     finally:
         db.close()
+
+def seed_premium_events(db):
+    """Seed initial premium events data"""
+    from datetime import datetime
+    import uuid
+    
+    events = [
+        {
+            "id": str(uuid.uuid4()),
+            "name": "March Madness 2025",
+            "slug": "march-madness-2025",
+            "description": "Unlock exclusive AI-powered bracket predictions, team analytics, and real-time upset alerts for the entire March Madness tournament.",
+            "status": "upcoming",
+            "start_date": datetime(2025, 3, 10),
+            "end_date": datetime(2025, 4, 7),
+            "expiration_date": datetime(2025, 5, 7),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Super Bowl 2026",
+            "slug": "super-bowl-2026",
+            "description": "Get AI-driven predictions, player matchup analysis, and real-time game insights for Super Bowl LX.",
+            "status": "upcoming",
+            "start_date": datetime(2026, 1, 10),
+            "end_date": datetime(2026, 2, 8),
+            "expiration_date": datetime(2026, 3, 10),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "World Series 2025",
+            "slug": "world-series-2025",
+            "description": "Access advanced baseball analytics, pitcher-batter matchup predictions, and AI-powered game forecasts for the entire World Series.",
+            "status": "upcoming",
+            "start_date": datetime(2025, 10, 10),
+            "end_date": datetime(2025, 10, 30),
+            "expiration_date": datetime(2025, 12, 30),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "NBA Finals 2025",
+            "slug": "nba-finals-2025",
+            "description": "Unlock comprehensive NBA Finals analytics including player performance predictions, team matchup analysis, and AI-driven game forecasts.",
+            "status": "upcoming",
+            "start_date": datetime(2025, 6, 1),
+            "end_date": datetime(2025, 6, 25),
+            "expiration_date": datetime(2025, 7, 25),
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Racing Championship 2025",
+            "slug": "racing-championship-2025",
+            "description": "Get AI-powered race predictions, driver performance analytics, and track condition insights for the entire racing championship season.",
+            "status": "upcoming",
+            "start_date": datetime(2025, 11, 1),
+            "end_date": datetime(2025, 11, 30),
+            "expiration_date": datetime(2026, 1, 30),
+        },
+    ]
+    
+    try:
+        for event_data in events:
+            existing = db.query(PremiumEvent).filter(PremiumEvent.slug == event_data["slug"]).first()
+            if not existing:
+                event = PremiumEvent(**event_data)
+                db.add(event)
+        db.commit()
+        print("✓ Migration: Seeded premium events data")
+    except Exception as e:
+        db.rollback()
+        print(f"Migration note: Premium events may already exist - {e}")
