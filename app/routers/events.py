@@ -2,11 +2,16 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
+from pydantic import BaseModel
 import uuid
 from app.database import get_db, User, PremiumEvent, EventSubscription
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+
+class MockCheckoutRequest(BaseModel):
+    event_slug: str
+    option_type: str
 
 @router.get("/list")
 async def get_events_list(
@@ -131,22 +136,21 @@ async def get_my_subscriptions(
 
 @router.post("/mock-checkout")
 async def mock_checkout(
-    event_slug: str,
-    option_type: str,
+    request: MockCheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Mock checkout endpoint for testing (no real Stripe integration)"""
-    event = db.query(PremiumEvent).filter(PremiumEvent.slug == event_slug).first()
+    event = db.query(PremiumEvent).filter(PremiumEvent.slug == request.event_slug).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if option_type not in ["single", "season"]:
+    if request.option_type not in ["single", "season"]:
         raise HTTPException(status_code=400, detail="Invalid option type")
     
     existing_sub = db.query(EventSubscription).filter(
         EventSubscription.user_id == current_user.id,
-        EventSubscription.event_slug == event_slug,
+        EventSubscription.event_slug == request.event_slug,
         EventSubscription.is_active == True
     ).first()
     
@@ -156,8 +160,8 @@ async def mock_checkout(
     subscription = EventSubscription(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
-        event_slug=event_slug,
-        option_type=option_type,
+        event_slug=request.event_slug,
+        option_type=request.option_type,
         expiration_date=event.expiration_date,
         is_active=True
     )
