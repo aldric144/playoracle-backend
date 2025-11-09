@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 import uuid
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
 from app.schemas.predictions import GameResponse
-from app.models.database import db, User, Game
+from app.database import get_db, User, Game
 from app.utils.auth import get_current_user
 from app.services.thesportsdb import TheSportsDBService
 from app.services.balldontlie import BallDontLieService
@@ -37,14 +38,18 @@ async def get_available_sports(current_user: User = Depends(get_current_user)):
 @router.get("/{sport}/schedule", response_model=List[GameResponse])
 async def get_sport_schedule(
     sport: str,
-    current_user: User = Depends(get_current_user)
+    show_all: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get upcoming games for a sport"""
     games = []
+    limit = None if show_all else 3
     
     if sport == "nba":
         nba_games = await balldontlie.get_games(season=2024)
-        for game_data in nba_games[:10]:
+        game_limit = len(nba_games) if show_all else min(10, len(nba_games))
+        for game_data in nba_games[:game_limit]:
             game_id = str(uuid.uuid4())
             home_team = game_data.get("home_team", {}).get("full_name", "Unknown")
             away_team = game_data.get("visitor_team", {}).get("full_name", "Unknown")
@@ -58,12 +63,13 @@ async def get_sport_schedule(
                 scheduled_time=datetime.utcnow() + timedelta(days=1),
                 status=game_data.get("status", "scheduled")
             )
-            db.add_game(game)
+            db.add(game)
             games.append(game)
     
     elif sport == "f1":
         f1_races = await ergast.get_current_season_races()
-        for race_data in f1_races[:5]:
+        race_limit = len(f1_races) if show_all else min(5, len(f1_races))
+        for race_data in f1_races[:race_limit]:
             game_id = str(uuid.uuid4())
             race_name = race_data.get("raceName", "Unknown Race")
             
@@ -76,12 +82,13 @@ async def get_sport_schedule(
                 scheduled_time=datetime.utcnow() + timedelta(days=7),
                 status="scheduled"
             )
-            db.add_game(game)
+            db.add(game)
             games.append(game)
     
     elif sport == "ncaaf":
         cfb_games = await collegefootball.get_games(year=2024)
-        for game_data in cfb_games[:10]:
+        game_limit = len(cfb_games) if show_all else min(10, len(cfb_games))
+        for game_data in cfb_games[:game_limit]:
             game_id = str(uuid.uuid4())
             home_team = game_data.get("home_team", "Unknown")
             away_team = game_data.get("away_team", "Unknown")
@@ -95,19 +102,20 @@ async def get_sport_schedule(
                 scheduled_time=datetime.utcnow() + timedelta(days=2),
                 status="scheduled"
             )
-            db.add_game(game)
+            db.add(game)
             games.append(game)
     
     else:
         mock_teams = {
-            "nfl": [("Chiefs", "Bills"), ("49ers", "Cowboys"), ("Eagles", "Packers")],
-            "mlb": [("Yankees", "Red Sox"), ("Dodgers", "Giants"), ("Astros", "Rangers")],
-            "nhl": [("Maple Leafs", "Canadiens"), ("Bruins", "Rangers"), ("Penguins", "Capitals")],
-            "soccer": [("Manchester United", "Liverpool"), ("Barcelona", "Real Madrid"), ("Bayern", "Dortmund")]
+            "nfl": [("Chiefs", "Bills"), ("49ers", "Cowboys"), ("Eagles", "Packers"), ("Ravens", "Steelers"), ("Bengals", "Browns"), ("Rams", "Cardinals"), ("Seahawks", "49ers"), ("Patriots", "Jets")],
+            "mlb": [("Yankees", "Red Sox"), ("Dodgers", "Giants"), ("Astros", "Rangers"), ("Cubs", "White Sox"), ("Mets", "Phillies")],
+            "nhl": [("Maple Leafs", "Canadiens"), ("Bruins", "Rangers"), ("Penguins", "Capitals"), ("Oilers", "Flames"), ("Lightning", "Panthers")],
+            "soccer": [("Manchester United", "Liverpool"), ("Barcelona", "Real Madrid"), ("Bayern", "Dortmund"), ("PSG", "Marseille"), ("Juventus", "AC Milan")]
         }
         
         if sport in mock_teams:
-            for i, (home, away) in enumerate(mock_teams[sport]):
+            teams_to_show = mock_teams[sport] if show_all else mock_teams[sport][:3]
+            for i, (home, away) in enumerate(teams_to_show):
                 game_id = str(uuid.uuid4())
                 game = Game(
                     id=game_id,
@@ -118,8 +126,10 @@ async def get_sport_schedule(
                     scheduled_time=datetime.utcnow() + timedelta(days=i+1),
                     status="scheduled"
                 )
-                db.add_game(game)
+                db.add(game)
                 games.append(game)
+    
+    db.commit()
     
     return [
         GameResponse(

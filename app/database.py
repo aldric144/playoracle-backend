@@ -39,6 +39,7 @@ class User(Base):
     stripe_customer_id = Column(String, nullable=True)
     sports_dna = Column(JSON, default={})
     badges = Column(JSON, default=[])
+    is_admin = Column(Boolean, default=False, nullable=False)
 
 class Prediction(Base):
     __tablename__ = "predictions"
@@ -85,4 +86,43 @@ def get_db():
         db.close()
 
 def init_db():
+    """Initialize database tables and run migrations"""
     Base.metadata.create_all(bind=engine)
+    
+    run_migrations()
+
+def run_migrations():
+    """Run database migrations for schema updates"""
+    from sqlalchemy import text
+    
+    db = SessionLocal()
+    try:
+        try:
+            db.execute(text("""
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE
+            """))
+            db.commit()
+            print("✓ Migration: Added is_admin column to users table")
+        except Exception as e:
+            db.rollback()
+            print(f"Migration note: is_admin column may already exist - {e}")
+        
+        try:
+            result = db.execute(text("""
+                UPDATE users 
+                SET is_admin = TRUE 
+                WHERE email = 'admin@playoracle.com'
+                RETURNING id
+            """))
+            db.commit()
+            if result.rowcount > 0:
+                print("✓ Migration: Set admin@playoracle.com as admin")
+            else:
+                print("Note: admin@playoracle.com user not found (will be created on signup)")
+        except Exception as e:
+            db.rollback()
+            print(f"Migration note: Could not update admin user - {e}")
+            
+    finally:
+        db.close()

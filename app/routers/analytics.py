@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict
 from datetime import datetime, timedelta
-from app.models.database import db, User
+from sqlalchemy.orm import Session
+from app.database import get_db, User, Game, AIPrediction
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -95,14 +96,15 @@ async def get_player_analytics(
 @router.get("/coach-corner/{game_id}")
 async def get_coach_corner_analysis(
     game_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get AI Coach's Corner analysis for a game"""
-    game = db.games.get(game_id)
+    game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     
-    ai_prediction = db.get_ai_prediction(game_id)
+    ai_prediction = db.query(AIPrediction).filter(AIPrediction.game_id == game_id).first()
     
     analysis = {
         "game_id": game_id,

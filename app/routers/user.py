@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from typing import List, Dict
-from app.models.database import db, User, BadgeType
+from sqlalchemy.orm import Session
+from app.database import get_db, User, BadgeTypeEnum, Prediction
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -16,10 +17,12 @@ async def get_sports_dna(current_user: User = Depends(get_current_user)):
 @router.put("/sports-dna")
 async def update_sports_dna(
     sports_dna: Dict,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Update user's sports DNA preferences"""
     current_user.sports_dna = sports_dna
+    db.commit()
     return {
         "user_id": current_user.id,
         "sports_dna": current_user.sports_dna,
@@ -27,32 +30,39 @@ async def update_sports_dna(
     }
 
 @router.get("/badges")
-async def get_user_badges(current_user: User = Depends(get_current_user)):
+async def get_user_badges(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get user's earned badges"""
-    predictions = db.get_user_predictions(current_user.id)
+    predictions = db.query(Prediction).filter(Prediction.user_id == current_user.id).all()
     total = len(predictions)
     correct = sum(1 for p in predictions if p.was_correct)
     
     badges = []
     if total >= 10:
-        badges.append(BadgeType.BRONZE)
+        badges.append("bronze")
     if total >= 50 and correct >= 25:
-        badges.append(BadgeType.SILVER)
+        badges.append("silver")
     if total >= 100 and correct >= 60:
-        badges.append(BadgeType.GOLD)
+        badges.append("gold")
     
     current_user.badges = badges
+    db.commit()
     
     return {
         "user_id": current_user.id,
-        "badges": [badge.value for badge in badges],
-        "next_badge": "silver" if BadgeType.BRONZE in badges and BadgeType.SILVER not in badges else "gold"
+        "badges": badges,
+        "next_badge": "silver" if "bronze" in badges and "silver" not in badges else "gold"
     }
 
 @router.get("/progress")
-async def get_user_progress(current_user: User = Depends(get_current_user)):
+async def get_user_progress(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get user's learning progress"""
-    predictions = db.get_user_predictions(current_user.id)
+    predictions = db.query(Prediction).filter(Prediction.user_id == current_user.id).all()
     
     total = len(predictions)
     correct = sum(1 for p in predictions if p.was_correct)
@@ -72,9 +82,12 @@ async def get_user_progress(current_user: User = Depends(get_current_user)):
     }
 
 @router.get("/report")
-async def generate_user_report(current_user: User = Depends(get_current_user)):
+async def generate_user_report(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Generate monthly progress report"""
-    predictions = db.get_user_predictions(current_user.id)
+    predictions = db.query(Prediction).filter(Prediction.user_id == current_user.id).all()
     
     total = len(predictions)
     correct = sum(1 for p in predictions if p.was_correct)
@@ -100,7 +113,7 @@ async def generate_user_report(current_user: User = Depends(get_current_user)):
         "total_predictions": total,
         "correct_predictions": correct,
         "by_sport": by_sport,
-        "badges": [badge.value for badge in current_user.badges],
+        "badges": current_user.badges if isinstance(current_user.badges, list) else [],
         "insights": [
             "You're showing consistent improvement in prediction accuracy",
             "Consider exploring more sports to broaden your Sports IQ",

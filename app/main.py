@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import psycopg
 
 from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics
 from app.database import init_db
