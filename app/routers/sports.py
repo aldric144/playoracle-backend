@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 import uuid
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
 from app.schemas.predictions import GameResponse
-from app.models.database import db, User, Game
+from app.database import get_db, User, Game
 from app.utils.auth import get_current_user
 from app.services.thesportsdb import TheSportsDBService
 from app.services.balldontlie import BallDontLieService
@@ -38,7 +39,8 @@ async def get_available_sports(current_user: User = Depends(get_current_user)):
 async def get_sport_schedule(
     sport: str,
     show_all: bool = False,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get upcoming games for a sport"""
     games = []
@@ -61,7 +63,7 @@ async def get_sport_schedule(
                 scheduled_time=datetime.utcnow() + timedelta(days=1),
                 status=game_data.get("status", "scheduled")
             )
-            db.add_game(game)
+            db.add(game)
             games.append(game)
     
     elif sport == "f1":
@@ -80,7 +82,7 @@ async def get_sport_schedule(
                 scheduled_time=datetime.utcnow() + timedelta(days=7),
                 status="scheduled"
             )
-            db.add_game(game)
+            db.add(game)
             games.append(game)
     
     elif sport == "ncaaf":
@@ -100,7 +102,7 @@ async def get_sport_schedule(
                 scheduled_time=datetime.utcnow() + timedelta(days=2),
                 status="scheduled"
             )
-            db.add_game(game)
+            db.add(game)
             games.append(game)
     
     else:
@@ -124,8 +126,10 @@ async def get_sport_schedule(
                     scheduled_time=datetime.utcnow() + timedelta(days=i+1),
                     status="scheduled"
                 )
-                db.add_game(game)
+                db.add(game)
                 games.append(game)
+    
+    db.commit()
     
     return [
         GameResponse(

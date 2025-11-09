@@ -1,29 +1,35 @@
 from fastapi import APIRouter, Depends
 from typing import List, Dict
-from app.models.database import db, User
+from sqlalchemy.orm import Session
+from app.database import get_db, User, Prediction
 from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/leaderboard", tags=["leaderboard"])
 
 @router.get("/global")
-async def get_global_leaderboard(current_user: User = Depends(get_current_user)):
+async def get_global_leaderboard(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """Get global leaderboard"""
     leaderboard = []
     
-    for user in db.users.values():
-        predictions = db.get_user_predictions(user.id)
+    users = db.query(User).all()
+    for user in users:
+        predictions = db.query(Prediction).filter(Prediction.user_id == user.id).all()
         total = len(predictions)
         correct = sum(1 for p in predictions if p.was_correct)
         accuracy = (correct / total * 100) if total > 0 else 0
         
-        if total >= 5:  # Only include users with at least 5 predictions
+        if total >= 5:
+            badges = user.badges if isinstance(user.badges, list) else []
             leaderboard.append({
                 "user_id": user.id,
                 "full_name": user.full_name,
                 "accuracy": round(accuracy, 2),
                 "total_predictions": total,
                 "correct_predictions": correct,
-                "badges": len(user.badges)
+                "badges": len(badges)
             })
     
     leaderboard.sort(key=lambda x: (x["accuracy"], x["total_predictions"]), reverse=True)
@@ -32,25 +38,30 @@ async def get_global_leaderboard(current_user: User = Depends(get_current_user))
         entry["rank"] = i + 1
     
     return {
-        "leaderboard": leaderboard[:50],  # Top 50
+        "leaderboard": leaderboard[:50],
         "total_users": len(leaderboard)
     }
 
 @router.get("/{sport}")
 async def get_sport_leaderboard(
     sport: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get sport-specific leaderboard"""
     leaderboard = []
     
-    for user in db.users.values():
-        predictions = [p for p in db.get_user_predictions(user.id) if p.sport == sport]
+    users = db.query(User).all()
+    for user in users:
+        predictions = db.query(Prediction).filter(
+            Prediction.user_id == user.id,
+            Prediction.sport == sport
+        ).all()
         total = len(predictions)
         correct = sum(1 for p in predictions if p.was_correct)
         accuracy = (correct / total * 100) if total > 0 else 0
         
-        if total >= 3:  # Only include users with at least 3 predictions in this sport
+        if total >= 3:
             leaderboard.append({
                 "user_id": user.id,
                 "full_name": user.full_name,
@@ -66,7 +77,7 @@ async def get_sport_leaderboard(
     
     return {
         "sport": sport,
-        "leaderboard": leaderboard[:25],  # Top 25
+        "leaderboard": leaderboard[:25],
         "total_users": len(leaderboard)
     }
 

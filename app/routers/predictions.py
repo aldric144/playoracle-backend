@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 import uuid
 from datetime import datetime
+from sqlalchemy.orm import Session
 from app.schemas.predictions import (
     PredictionCreate, PredictionResponse, AIPredictionResponse,
     UserAccuracyResponse
 )
-from app.models.database import db, User, Prediction, AIPrediction
+from app.database import get_db, User, Prediction, AIPrediction, Game
 from app.utils.auth import get_current_user
 from app.ml.prediction_engine import prediction_engine
 
@@ -15,7 +16,8 @@ router = APIRouter(prefix="/api/predictions", tags=["predictions"])
 @router.post("/user", response_model=PredictionResponse)
 async def create_user_prediction(
     prediction_data: PredictionCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Submit a user prediction"""
     prediction = Prediction(
@@ -26,7 +28,9 @@ async def create_user_prediction(
         predicted_winner=prediction_data.predicted_winner,
         confidence=prediction_data.confidence
     )
-    db.add_prediction(prediction)
+    db.add(prediction)
+    db.commit()
+    db.refresh(prediction)
     
     return PredictionResponse(
         id=prediction.id,
@@ -42,10 +46,11 @@ async def create_user_prediction(
 
 @router.get("/user/history", response_model=List[PredictionResponse])
 async def get_user_prediction_history(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get user's prediction history"""
-    predictions = db.get_user_predictions(current_user.id)
+    predictions = db.query(Prediction).filter(Prediction.user_id == current_user.id).all()
     return [
         PredictionResponse(
             id=p.id,
@@ -63,10 +68,11 @@ async def get_user_prediction_history(
 
 @router.get("/user/accuracy", response_model=UserAccuracyResponse)
 async def get_user_accuracy(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get user's prediction accuracy stats"""
-    predictions = db.get_user_predictions(current_user.id)
+    predictions = db.query(Prediction).filter(Prediction.user_id == current_user.id).all()
     
     total = len(predictions)
     correct = sum(1 for p in predictions if p.was_correct)
@@ -95,10 +101,11 @@ async def get_user_accuracy(
 @router.get("/game/{game_id}", response_model=AIPredictionResponse)
 async def get_ai_prediction_for_game(
     game_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get AI prediction for a specific game"""
-    existing = db.get_ai_prediction(game_id)
+    existing = db.query(AIPrediction).filter(AIPrediction.game_id == game_id).first()
     if existing:
         return AIPredictionResponse(
             game_id=existing.game_id,
@@ -110,7 +117,7 @@ async def get_ai_prediction_for_game(
             created_at=existing.created_at
         )
     
-    game = db.games.get(game_id)
+    game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     
@@ -129,7 +136,9 @@ async def get_ai_prediction_for_game(
         analysis=prediction_data["analysis"],
         factors=prediction_data["factors"]
     )
-    db.add_ai_prediction(ai_prediction)
+    db.add(ai_prediction)
+    db.commit()
+    db.refresh(ai_prediction)
     
     return AIPredictionResponse(
         game_id=ai_prediction.game_id,
@@ -143,10 +152,11 @@ async def get_ai_prediction_for_game(
 
 @router.get("/user/insights")
 async def get_user_insights(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get personalized insights based on user's prediction history"""
-    predictions = db.get_user_predictions(current_user.id)
+    predictions = db.query(Prediction).filter(Prediction.user_id == current_user.id).all()
     
     history = [
         {

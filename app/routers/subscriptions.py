@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Dict
+from sqlalchemy.orm import Session
 import stripe
-from app.models.database import db, User, SubscriptionTier
+from app.database import get_db, User, SubscriptionTierEnum
 from app.utils.auth import get_current_user
 from app.config import get_settings
 
@@ -119,19 +120,21 @@ async def get_subscription_status(
 
 @router.post("/cancel")
 async def cancel_subscription(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Cancel user's subscription"""
-    if current_user.subscription_tier == SubscriptionTier.FREE:
+    if current_user.subscription_tier == SubscriptionTierEnum.FREE:
         raise HTTPException(status_code=400, detail="No active subscription to cancel")
     
-    current_user.subscription_tier = SubscriptionTier.FREE
+    current_user.subscription_tier = SubscriptionTierEnum.FREE
     current_user.stripe_customer_id = None
+    db.commit()
     
     return {"message": "Subscription cancelled successfully"}
 
 @router.post("/webhook")
-async def stripe_webhook(request: Request):
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle Stripe webhooks"""
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -150,12 +153,13 @@ async def stripe_webhook(request: Request):
         user_id = session["metadata"]["user_id"]
         plan_id = session["metadata"]["plan_id"]
         
-        user = db.get_user_by_id(user_id)
+        user = db.query(User).filter(User.id == user_id).first()
         if user:
             if plan_id == "pro":
-                user.subscription_tier = SubscriptionTier.PRO
+                user.subscription_tier = SubscriptionTierEnum.PRO
             elif plan_id == "oracle_plus":
-                user.subscription_tier = SubscriptionTier.ORACLE_PLUS
+                user.subscription_tier = SubscriptionTierEnum.ORACLE_PLUS
             user.stripe_customer_id = session.get("customer")
+            db.commit()
     
     return {"status": "success"}
