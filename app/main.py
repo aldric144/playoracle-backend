@@ -4,9 +4,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import logging
 
-from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics, events, admin_events, rivalry, boxing, sports_intel, mma, tennis, hockey, volleyball, rugby, cricket
+from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics, events, admin_events, rivalry, boxing, sports_intel, mma, tennis, hockey, volleyball, rugby, cricket, live_data
 from app.database import init_db, SessionLocal
 from app.services.sports_intel import SportsIntelAggregator
+from app.services.sportsdata_client import LiveDataService
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -41,19 +43,62 @@ async def scheduled_sports_sync():
     finally:
         db.close()
 
+async def scheduled_live_data_sync():
+    """Background job to sync live sports data every 15 minutes"""
+    logger.info("Starting scheduled live data sync...")
+    settings = get_settings()
+    
+    try:
+        service = LiveDataService(api_key=settings.sportsdata_api_key)
+        
+        sports = ["nfl", "nba", "mlb", "nhl", "soccer", "golf", "tennis", 
+                 "mma", "boxing", "college_football"]
+        
+        results = {}
+        for sport in sports:
+            try:
+                games = await service.get_upcoming_games(sport)
+                results[sport] = {
+                    "count": len(games),
+                    "status": "success"
+                }
+                logger.info(f"Synced {len(games)} games for {sport}")
+            except Exception as e:
+                results[sport] = {
+                    "count": 0,
+                    "status": "error",
+                    "error": str(e)
+                }
+                logger.error(f"Failed to sync {sport}: {e}")
+        
+        logger.info(f"Live data sync completed: {results}")
+    except Exception as e:
+        logger.error(f"Live data sync failed: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
     
+    # Daily sports data sync at 04:15 UTC
     scheduler.add_job(
         scheduled_sports_sync,
-        CronTrigger(hour=4, minute=15),  # Run daily at 04:15 UTC
+        CronTrigger(hour=4, minute=15),
         id="sports_sync",
         name="Daily Sports Data Sync",
         replace_existing=True
     )
+    
+    scheduler.add_job(
+        scheduled_live_data_sync,
+        'interval',
+        minutes=15,
+        id="live_data_sync",
+        name="Live Sports Data Sync (15 min)",
+        replace_existing=True
+    )
+    
     scheduler.start()
-    logger.info("Background scheduler started for sports data sync")
+    logger.info("Background scheduler started for sports data sync and live data sync")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -78,6 +123,7 @@ app.include_router(volleyball.router)
 app.include_router(rugby.router)
 app.include_router(cricket.router)
 app.include_router(sports_intel.router)
+app.include_router(live_data.router)
 
 @app.get("/healthz")
 async def healthz():

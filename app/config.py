@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     
     thesportsdb_api_key: str = "3"
     footballdata_api_key: str = ""
+    sportsdata_api_key: str = ""
     
     redis_url: str = "redis://localhost:6379"
     
