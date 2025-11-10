@@ -22,15 +22,19 @@ async def get_events_list(
     events = db.query(PremiumEvent).all()
     
     events_list = []
+    now = datetime.utcnow()
+    
     for event in events:
         user_subscription = db.query(EventSubscription).filter(
             EventSubscription.user_id == current_user.id,
             EventSubscription.event_slug == event.slug,
             EventSubscription.is_active == True,
-            EventSubscription.expiration_date > datetime.utcnow()
+            EventSubscription.expiration_date > now
         ).first()
         
         has_access = user_subscription is not None or current_user.subscription_tier == "oracle_plus"
+        is_expired = event.expiration_date <= now
+        can_unlock = not is_expired and not has_access
         
         events_list.append({
             "id": event.id,
@@ -42,6 +46,8 @@ async def get_events_list(
             "end_date": event.end_date.isoformat(),
             "expiration_date": event.expiration_date.isoformat(),
             "has_access": has_access,
+            "is_expired": is_expired,
+            "can_unlock": can_unlock,
             "price_single": 9.99,
             "price_season": 29.99
         })
@@ -144,6 +150,9 @@ async def mock_checkout(
     event = db.query(PremiumEvent).filter(PremiumEvent.slug == request.event_slug).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    
+    if event.expiration_date <= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This event has expired and can no longer be unlocked")
     
     if request.option_type not in ["single", "season"]:
         raise HTTPException(status_code=400, detail="Invalid option type")
