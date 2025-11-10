@@ -26,6 +26,7 @@ bcrypt = "^5.0.0"
 sqlalchemy = "^2.0.44"
 psycopg2-binary = "^2.9.11"
 alembic = "^1.17.1"
+apscheduler = "^3.11.1"
 
 
 [build-system]

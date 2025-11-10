@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, JSON, Enum as SQLEnum, Date, Text
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean, DateTime, JSON, Enum as SQLEnum, Date, Text, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -142,6 +142,85 @@ class RivalryMetrics(Base):
     avg_margin = Column(Float, default=0.0, nullable=False)
     current_streak = Column(String, nullable=True)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SportsCategoryEnum(str, enum.Enum):
+    PREMIUM = "premium"
+    SPORTS = "sports"
+
+class SportsEvent(Base):
+    __tablename__ = "sports_events"
+    
+    id = Column(String, primary_key=True, index=True)
+    category = Column(SQLEnum(SportsCategoryEnum), default=SportsCategoryEnum.SPORTS, nullable=False)
+    sport_type = Column(String, index=True, nullable=False)
+    league = Column(String, nullable=True)
+    start_time = Column(DateTime, nullable=False)
+    home_team = Column(String, nullable=True)
+    away_team = Column(String, nullable=True)
+    fighter_one_id = Column(String, nullable=True)
+    fighter_two_id = Column(String, nullable=True)
+    dci_score = Column(Float, nullable=True)
+    dci_class = Column(String, nullable=True)
+    analysis_text = Column(Text, nullable=True)
+    source_ids = Column(JSON, default={})
+    merged_payload = Column(JSON, default={})
+    computed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        Index('idx_sports_events_sport_time', 'sport_type', 'start_time'),
+        Index('idx_sports_events_dci', 'dci_score'),
+    )
+
+class Fighter(Base):
+    __tablename__ = "fighters"
+    
+    id = Column(String, primary_key=True, index=True)
+    external_ids = Column(JSON, default={})
+    name = Column(String, nullable=False, index=True)
+    age = Column(Integer, nullable=True)
+    stance = Column(String, nullable=True)
+    nationality = Column(String, nullable=True)
+    weight_class = Column(String, nullable=True)
+    reach_cm = Column(Float, nullable=True)
+    height_cm = Column(Float, nullable=True)
+    record_wins = Column(Integer, default=0)
+    record_losses = Column(Integer, default=0)
+    record_draws = Column(Integer, default=0)
+    ko_pct = Column(Float, nullable=True)
+    ko_wins = Column(Integer, default=0)
+    ko_losses = Column(Integer, default=0)
+    power_idx = Column(Float, nullable=True)
+    speed_idx = Column(Float, nullable=True)
+    stamina_idx = Column(Float, nullable=True)
+    defense_idx = Column(Float, nullable=True)
+    win_streak = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class FightHistory(Base):
+    __tablename__ = "fight_history"
+    
+    id = Column(String, primary_key=True, index=True)
+    fighter_id = Column(String, index=True, nullable=False)
+    opponent_id = Column(String, nullable=True)
+    opponent_name = Column(String, nullable=True)
+    result = Column(String, nullable=False)
+    method = Column(String, nullable=True)
+    fight_date = Column(Date, nullable=False)
+    rounds = Column(Integer, nullable=True)
+    judges = Column(JSON, default={})
+    event_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class SportsCache(Base):
+    __tablename__ = "sports_cache"
+    
+    cache_key = Column(String, primary_key=True)
+    payload = Column(JSON, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 def get_db():
     db = SessionLocal()
