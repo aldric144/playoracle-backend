@@ -4,7 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import logging
 
-from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics, events, admin_events, rivalry, boxing, sports_intel
+from app.routers import auth, predictions, sports, subscriptions, user, leaderboard, analytics, events, admin_events, rivalry, boxing, sports_intel, mma, tennis, hockey
 from app.database import init_db, SessionLocal
 from app.services.sports_intel import SportsIntelAggregator
 
@@ -71,6 +71,9 @@ app.include_router(events.router)
 app.include_router(admin_events.router)
 app.include_router(rivalry.router)
 app.include_router(boxing.router)
+app.include_router(mma.router)
+app.include_router(tennis.router)
+app.include_router(hockey.router)
 app.include_router(sports_intel.router)
 
 @app.get("/healthz")
