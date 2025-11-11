@@ -1,11 +1,14 @@
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pydantic import BaseModel
+import random
 
 router = APIRouter(prefix="/api/ai", tags=["ai_analytics"])
 
 _accuracy_cache: Dict[str, Any] = {}
+_commentary_cache: Dict[str, Any] = {}
+_commentary_log: List[Dict[str, Any]] = []
 
 
 class SportAccuracy(BaseModel):
@@ -186,3 +189,171 @@ async def get_sport_accuracy(sport: str):
         status_code=404,
         detail=f"Accuracy data not available for {sport}"
     )
+
+
+class AICommentary(BaseModel):
+    sport: str
+    season: int
+    commentary: str
+    trust_index: str  # "verified" | "high" | "moderate" | "low"
+    confidence: float
+    accuracy: float
+    delta: float
+    key_factors: List[str]
+    data_sources: List[str]
+    last_updated: str
+    timestamp: str
+
+
+def generate_commentary(sport: str, season: int, accuracy: float, delta: float, trend_r: float) -> str:
+    """
+    Generate AI self-commentary based on prediction accuracy and performance metrics.
+    """
+    sport_display = sport.upper() if len(sport) <= 4 else sport.replace("_", " ").title()
+    
+    if accuracy >= 85:
+        templates = [
+            f"I predicted the {season} {sport_display} season with {accuracy:.1f}% confidence — my defensive weighting update proved crucial.",
+            f"My {sport_display} model achieved {accuracy:.1f}% accuracy by factoring in momentum shifts and injury impact analysis.",
+            f"The {season} {sport_display} predictions hit {accuracy:.1f}% accuracy after I refined my playoff probability algorithms.",
+            f"I correctly forecasted {int(accuracy)}% of {sport_display} outcomes by emphasizing late-season form and head-to-head records."
+        ]
+    elif accuracy >= 70:
+        templates = [
+            f"I achieved {accuracy:.1f}% accuracy in {sport_display} — next season I'll weight bench depth more heavily.",
+            f"My {sport_display} model hit {accuracy:.1f}% by analyzing roster changes, though I underestimated coaching impact.",
+            f"The {season} {sport_display} season taught me to factor in home-field advantage more precisely ({accuracy:.1f}% accuracy).",
+            f"I reached {accuracy:.1f}% accuracy in {sport_display} but missed key upset predictions due to weather variables."
+        ]
+    else:
+        templates = [
+            f"I missed the {sport_display} season predictions by {100 - accuracy:.1f}% — adjusting my injury recovery timeline model for next year.",
+            f"My {sport_display} accuracy was {accuracy:.1f}% due to underestimating bench momentum — recalibrating for {season + 1}.",
+            f"The {season} {sport_display} season exposed gaps in my playoff seeding algorithm ({accuracy:.1f}% accuracy) — improvements incoming.",
+            f"I achieved {accuracy:.1f}% in {sport_display} but learned to better weight mid-season trades and roster chemistry."
+        ]
+    
+    if delta > 2.0:
+        templates.append(f"My {sport_display} model improved {delta:.1f}% year-over-year by incorporating advanced momentum metrics.")
+    elif delta < -1.0:
+        templates.append(f"My {sport_display} accuracy dropped {abs(delta):.1f}% this season — analyzing variance patterns for next year.")
+    
+    return random.choice(templates)
+
+
+def get_trust_index(confidence: float) -> str:
+    """
+    Determine trust index tier based on confidence level.
+    """
+    if confidence >= 90:
+        return "verified"
+    elif confidence >= 75:
+        return "high"
+    elif confidence >= 60:
+        return "moderate"
+    else:
+        return "low"
+
+
+MOCK_KEY_FACTORS = {
+    "nfl": ["Defensive line pressure", "Red zone efficiency", "Turnover differential", "Playoff experience"],
+    "nba": ["Bench depth scoring", "Three-point percentage", "Defensive rating", "Clutch performance"],
+    "mlb": ["Bullpen consistency", "On-base percentage", "Starting rotation ERA", "Home run rate"],
+    "nhl": ["Goaltender save %", "Power play efficiency", "Shot differential", "Penalty kill rate"],
+    "soccer": ["Possession control", "Shot accuracy", "Defensive organization", "Set piece conversion"],
+    "formula1": ["Qualifying pace", "Tire strategy", "Pit stop efficiency", "Weather adaptation"],
+    "college_football": ["Recruiting class rank", "Offensive line strength", "Turnover margin", "Special teams"],
+    "boxing": ["Punch accuracy", "Ring control", "Stamina endurance", "Counter-punching"],
+    "mma": ["Ground control time", "Striking accuracy", "Takedown defense", "Cardio conditioning"],
+    "tennis": ["First serve %", "Break point conversion", "Unforced errors", "Court coverage"],
+    "volleyball": ["Block efficiency", "Service aces", "Dig success rate", "Attack percentage"],
+    "rugby": ["Scrum dominance", "Lineout success", "Tackle completion", "Territory control"],
+    "cricket": ["Bowling economy", "Batting strike rate", "Fielding efficiency", "Partnership building"],
+    "golf": ["Driving accuracy", "Greens in regulation", "Putting average", "Scrambling ability"],
+    "table_tennis": ["Service variation", "Forehand consistency", "Footwork speed", "Rally endurance"],
+    "nascar": ["Pit crew speed", "Fuel strategy", "Drafting efficiency", "Track position"],
+    "motogp": ["Cornering speed", "Braking precision", "Tire management", "Overtaking skill"],
+    "cycling": ["Climbing power", "Sprint speed", "Team tactics", "Aerodynamic positioning"]
+}
+
+
+@router.get("/commentary/{sport}/{season}", response_model=AICommentary)
+async def get_ai_commentary(sport: str, season: int):
+    """
+    Get AI self-commentary for a specific sport and season.
+    Generates dynamic reflections based on prediction accuracy, DCI variance, and model factors.
+    """
+    cache_key = f"{sport}_{season}"
+    
+    if cache_key in _commentary_cache:
+        cached = _commentary_cache[cache_key]
+        cached_time = datetime.fromisoformat(cached["timestamp"])
+        if (datetime.utcnow() - cached_time).total_seconds() < 86400:
+            return cached
+    
+    sport_lower = sport.lower().replace("-", "_").replace(" ", "_")
+    
+    if sport_lower not in MOCK_AI_ACCURACY_DATA:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Commentary not available for {sport}"
+        )
+    
+    accuracy_data = MOCK_AI_ACCURACY_DATA[sport_lower]
+    accuracy = accuracy_data["accuracy"]
+    delta = accuracy_data["delta"]
+    trend_r = accuracy_data["trend_r"]
+    
+    commentary_text = generate_commentary(sport_lower, season, accuracy, delta, trend_r)
+    
+    confidence = min(100, accuracy + (trend_r * 10))
+    
+    trust_index = get_trust_index(confidence)
+    
+    key_factors = MOCK_KEY_FACTORS.get(sport_lower, ["Performance metrics", "Historical data", "Team dynamics", "Statistical analysis"])
+    
+    data_sources = ["SportsDataIO", "Sportradar", "Historical DCI Database"]
+    
+    commentary_obj = {
+        "sport": sport_lower,
+        "season": season,
+        "commentary": commentary_text,
+        "trust_index": trust_index,
+        "confidence": round(confidence, 1),
+        "accuracy": accuracy,
+        "delta": delta,
+        "key_factors": key_factors,
+        "data_sources": data_sources,
+        "last_updated": datetime.utcnow().isoformat(),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    _commentary_cache[cache_key] = commentary_obj
+    
+    _commentary_log.append({
+        **commentary_obj,
+        "logged_at": datetime.utcnow().isoformat()
+    })
+    
+    return commentary_obj
+
+
+@router.get("/commentary/{sport}")
+async def get_latest_commentary(sport: str):
+    """
+    Get the latest AI commentary for a sport (current season).
+    """
+    current_season = 2026
+    return await get_ai_commentary(sport, current_season)
+
+
+@router.get("/commentary-log")
+async def get_commentary_log(limit: int = 50):
+    """
+    Get recent AI commentary log entries for analysis and email digests.
+    """
+    return {
+        "total": len(_commentary_log),
+        "entries": _commentary_log[-limit:] if _commentary_log else [],
+        "last_updated": datetime.utcnow().isoformat()
+    }
